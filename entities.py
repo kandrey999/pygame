@@ -1,87 +1,38 @@
 import pygame
-from pygame.sprite import Sprite, Group
+from pygame.sprite import Sprite
 from constants import *
-from random import randrange, choice
-import resources as rc
-from os import path
+from random import randrange, choice, randint
+from resources import rc
+from collections import namedtuple
 
+# import resources as rc
+# from os import path
 
-class Player(Sprite):
-    def __init__(self, init_pos):
-        super().__init__()
-        self._image = rc.get_image('playerShip1_orange.png')
-        self.rect = self.image.get_rect()
-        self.rect.centerx, self.rect.bottom = init_pos
-        self._radius = min(self.rect.width, self.rect.height) // 2
-        self.speed = (0, 0)
-        self._shoot_rate = 100  # ms
-        self._hidden = False
-        self.lives = 5
-        self._hide_time = 0
-        self._last_update = pygame.time.get_ticks()
-        # pygame.draw.circle(self.image, RED, self.image.get_rect().center, self.radius)
-
-    @property
-    def image(self):
-        return self._image
-
-    @property
-    def radius(self):
-        return self._radius
-
-    @property
-    def hide_time(self):
-        return self._hide_time
-
-    @property
-    def hidden(self):
-        return self._hidden
-
-    # @property
-    # def lives(self):
-    #     return self._lives
-    # @lives.setter
-    # def lives(self, value):
-    #     self._lives += value
-    #     if self._lives > 10:
-    #         self._lives = 10
-
-    def shoot(self):
-        now = pygame.time.get_ticks()
-        if now - self._last_update > self._shoot_rate:
-            self._last_update = now
-            bullet = Bullet((self.rect.centerx, self.rect.top))
-            all_sprites.add(bullet)
-            bullets.add(bullet)
-
-    def hide(self):
-        self._hidden = True
-        self.rect.y = 5000
-        self._hide_time = pygame.time.get_ticks()
-
-    def show(self):
-        self._hidden = False
-        self.rect.centerx = WIDTH / 2
-        self.rect.bottom = HEIGHT - 10
+Point = namedtuple('Point', 'x y')
+Size = namedtuple('Size', 'width height')
 
 
 class Mob(Sprite):
-    img_names = ['meteorBrown_big1.png', 'meteorBrown_med1.png',
-                 'meteorGrey_big3.png', 'meteorGrey_med2.png']
-    images = [rc.get_image_with_rect(name) for name in img_names]
+    # img_names = ['meteorBrown_big1.png', 'meteorBrown_med1.png',
+    #              'meteorGrey_big3.png', 'meteorGrey_med2.png']
+    #
+    # snd_names = ['expl3.wav', 'expl6.wav']
 
-    snd_names = ['expl3.wav', 'expl6.wav']
-    explosion_sounds = [rc.get_sound(name) for name in snd_names]
-
-    def __init__(self, *args):
+    def __init__(self, screen_size, *args):
         super().__init__(*args)
-        self._image, self.rect = choice(Mob.images)
+        self._screen_size = Size(*screen_size)
+        self._groups = args
+        # self.explosion_sounds = [rc.get_sound(name) for name in self.snd_names]
+        # self.images = [rc.get_image_with_rect(name) for name in self.img_names]
+        self._image = choice(rc.images['mob'])
+        self.rect = self._image.get_rect()  # choice(self.images)
         self.image = self._image
+        self.expl_sound = choice(rc.sounds['explosion'])
         self._speed = randrange(-10, 10), randrange(5, 15)
         self.radius = min(self.rect.width, self.rect.height) // 2
         self.rot = 0
         self.rot_speed = randrange(-3, 4)
-        self.rect.topleft = randrange(WIDTH - self.rect.width), \
+        self.rect.topleft = randrange(self._screen_size.width - self.rect.width), \
                             randrange(-self.rect.height * 3, -self.rect.height)
         self.health = 100
         # pygame.draw.circle(self.image, RED, self.image.get_rect().center, self.radius)
@@ -94,30 +45,31 @@ class Mob(Sprite):
     def update(self):
         self.rotate()
         self.rect.move_ip(self._speed)
-        if self.rect.top > HEIGHT + 10 or self.rect.right < -10 or self.rect.left > WIDTH + 10:
+        if self.rect.top > self._screen_size.height + 10 or self.rect.right < -10 or \
+                self.rect.left > self._screen_size.width + 10:
             # self.speed = randrange(-3, 4), randrange(1, 10)
             # self.rect.topleft = randrange(WIDTH - self.rect.width), \
             #                       randrange(-self.rect.height * 2, -self.rect.height)
             self.kill()
-            Mob(all_sprites, mobs)
+            # Mob(self._screen_size, self._groups)
 
     @property
     def explosion_sound(self):
-        return choice(Mob.explosion_sounds)
-
+        # return choice(self.explosion_sounds)
+        return self.expl_sound
     # def __del__(self):
     #     print(f'del {self}')
 
 
 class Bullet(Sprite):
-    sound = rc.get_sound('pew.wav')
-
     def __init__(self, start_pos):
         super().__init__()
-        self.image, self.rect = rc.get_image_with_rect('laserRed07.png')
-        self.speed_y = -10
+        self.sound = rc.sounds['pew']  # rc.get_sound('pew.wav')
+        self.image = rc.images['bullet']
+        self.rect = self.image.get_rect()  # rc.get_image_with_rect('laserRed07.png')
+        self.speed_y = -15
         self.rect.centerx, self.rect.bottom = start_pos
-        Bullet.sound.play()
+        self.sound.play()
 
     def update(self):
         self.rect.y += self.speed_y
@@ -147,8 +99,18 @@ class ProgressBar(Sprite):
 
     @value.setter
     def value(self, value):
-        self._value = value
-        self._draw()
+        if self._value != value:
+            self._value = value
+            self._draw()
+
+
+class PlayerHealthProgressBar(ProgressBar):
+    def __init__(self, player):
+        super().__init__(10, 20)
+        self._player = player
+
+    def update(self):
+        self.value = self._player.health
 
 
 class TextLabel(Sprite):
@@ -212,36 +174,36 @@ class AbstractExplosion(AnimatedSprite):
 
 class Explosion(AbstractExplosion):
     def __init__(self, pos, size):
-        images = [rc.get_scaled_image(path.join('regularExplosions', f'regularExplosion0{i}.png'),
-                                      (size, size)) for i in range(9)]
+        images = [pygame.transform.scale(image, (size, size)) for image in rc.images['explosion']]
+        # images = [rc.get_scaled_image(path.join('regularExplosions', f'regularExplosion0{i}.png'),
+        #                               (size, size)) for i in range(9)]
         super().__init__(pos, images, 10)
 
 
 class PlayerExplosion(AbstractExplosion):
-    images = [rc.get_image(path.join('sonicExplosions', f'sonicExplosion0{i}.png')) for i in range(9)]
-
     def __init__(self, pos):
-        super().__init__(pos, self.images, 20)
+        images = rc.images['player_explosion']
+        # self.images = [rc.get_image(path.join('sonicExplosions', f'sonicExplosion0{i}.png')) for i in range(9)]
+        super().__init__(pos, images, 20)
 
 
 class ImageProgressBar(Sprite):
-    def __init__(self, x, y, lives, image):
+    def __init__(self, x, y, image):
         super().__init__()
         # self.image = pygame.Surface((lives * 30, 50))
         # self.image.set_colorkey(BLACK)
         # self.image = img
         # self.rect = self.image.get_rect(right=x, top=y)
-        self.x = x
-        self.y = y
+        self._x, self._y = x, y
         self._image = image
-        self._value = lives
+        self._value = 0
         self._draw(self._value)
 
     def _draw(self, value):
         # self.image.fill(BLACK)
         rect = self._image.get_rect()
-        self.image = pygame.Surface((value * rect.width, rect.height * 2))
-        self.rect = self.image.get_rect(right=self.x, top=self.y)
+        self.image = pygame.Surface((value * rect.width * 1.2, rect.height * 2))
+        self.rect = self.image.get_rect(right=self._x, top=self._y)
         self.image.set_colorkey(BLACK)
         for i in range(value):
             img_rect = self._image.get_rect()
@@ -256,26 +218,40 @@ class ImageProgressBar(Sprite):
 
     @value.setter
     def value(self, value):
+        if self._value != value:
+            print('set')
+            self._value = value
+            self._draw(self._value)
         # print('set')
-        self._value = value
-        self._draw(self._value)
+        # self._value = value
+        # self._draw(self._value)
 
 
-class PlayerHealthProgressBar(ImageProgressBar):
-    image = rc.get_scaled_image('playerShip1_orange.png', (40, 40))
+class PlayerLivesProgressBar(ImageProgressBar):
+    def __init__(self, x, y, player):
+        self.image = pygame.transform.scale(rc.images['player'],
+                                            (20, 20))  # rc.get_scaled_image('playerShip1_orange.png', (20, 20))
+        super().__init__(x, y, self.image)
+        self._player = player
 
-    def __init__(self, x, y, lives):
-        super().__init__(x, y, lives, self.image)
+    def update(self):
+        self.value = self._player.lives
 
 
 class Bonus(Sprite):
-    names = ['bold_gold.png', 'shield_gold.png']
+    # names = ['bolt_gold.png', 'shield_gold.png']
 
-    def __init__(self, pos):
+    def __init__(self, pos, height):
         super().__init__()
-        self._image = rc.get_image(choice(Bonus.names))
+        self._height = height
+        self._type = randint(0, 1)
+        self._image = rc.images['bonuses'][self._type]  # rc.get_image(self.names[self._type])
         self._rect = self.image.get_rect(center=pos)
         self.speed_y = 3
+
+    @property
+    def type(self):
+        return self._type
 
     @property
     def image(self):
@@ -287,9 +263,18 @@ class Bonus(Sprite):
 
     def update(self):
         self._rect.y += self.speed_y
-        if self._rect.top > HEIGHT:
+        if self._rect.top > self._height:
             self.kill()
 
+
+class GunPowerImageProgressBar(ImageProgressBar):
+    def __init__(self, x, y, player):
+        self.image = rc.images['bonus_bolt_small']  # rc.get_scaled_image('bolt_gold.png', (20, 20))
+        super().__init__(x, y, self.image)
+        self.player = player
+
+    def update(self):
+        self.value = self.player.power
 
 # class SonicExplosion(AbstractExplosion):
 #     def __init__(self, pos, size):
@@ -312,21 +297,3 @@ class Bonus(Sprite):
 #         self.anims = [rc.get_scaled_image(path.join('regularExplosions', f'regularExplosion0{i}.png'),
 #                                           (size, size)) for i in range(9)]
 #         super().__init__(pos, size)
-
-
-all_sprites = Group()
-player = Player((WIDTH / 2, HEIGHT - 10))
-all_sprites.add(player)
-mobs = Group()
-bullets = Group()
-for i in range(MOB_COUNT):
-    mob = Mob(all_sprites, mobs)
-
-progress_bar = ProgressBar(10, 10, value=100, height=15)
-all_sprites.add(progress_bar)
-
-score = TextLabel((WIDTH / 2, 10))
-all_sprites.add(score)
-
-player_health_bar = PlayerHealthProgressBar(WIDTH - 10, 0, player.lives)
-all_sprites.add(player_health_bar)
